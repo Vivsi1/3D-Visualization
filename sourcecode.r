@@ -4,31 +4,11 @@ libs <- c(
     "png", "rayshader", "magick", "rgl"
 )
 
-installed_libs <- libs %in% rownames(
-    installed.packages()
-)
-
-if(any(installed_libs == F)){
-    install.packages(
-        libs[!installed_libs]
-    )
-}
-
-invisible(lapply(
-    libs, library,
-    character.only = T
-))
-
-# 1. COUNTRY BOUNDARIES
-#----------------------
 
 country_sf <- giscoR::gisco_get_countries(
     country = "SI",
     resolution = "1"
 )
-
-# 2. FOREST TYPE RASTER
-#----------------------
 
 options(timeout = 600)
 url <- "https://s3-eu-west-1.amazonaws.com/vito.landcover.global/v3.0.1/2019/E000N60/E000N60_PROBAV_LC100_global_v3.0.1_2019-nrt_Forest-Type-layer_EPSG-4326.tif"
@@ -51,8 +31,6 @@ names(vals)
 names(vals)[1] <- "value"
 unique(vals$value)
 
-# 3. CROP FOREST TYPE RASTER
-#---------------------------
 
 crs_lambert <-
     "+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +datum=WGS84 +units=m +no_frfs"
@@ -67,8 +45,6 @@ terra::project(crs_lambert)
 
 terra::plot(country_forest_type)
 
-# 4. FOREST TYPE RASTER TO IMAGE
-#-------------------------------
 
 cols <- c(
     "#A9B0B3", 
@@ -105,11 +81,8 @@ terra::writeRaster(
 
 img <- png::readPNG(img_file)
 
-# 5. COUNTRY ELEVATION RASTER
-#----------------------------
-
 elev <- elevatr::get_elev_raster(
-    locations = country_sf, #warn about locations
+    locations = country_sf, 
     z = 8, clip = "locations"
 )
 
@@ -121,7 +94,7 @@ elmat <- rayshader::raster_to_matrix(
     elev_lambert
 )
 
-bio1_tile_path <- "C://Users//vivaa//Downloads//wc2.1_2.5m_bio_1.tif"  # Replace with actual path or filename
+bio1_tile_path <- "wc2.1_2.5m_bio_1.tif"  
 
 if (!file.exists(bio1_tile_path)) {
   stop("BIO1 tile not found. Please download and place it in your working directory.")
@@ -129,88 +102,66 @@ if (!file.exists(bio1_tile_path)) {
 
 bio1_rast <- terra::rast(bio1_tile_path)
 
-# Load raster if not already
-bio1_rast <- terra::rast(bio1_tile_path)
-
-# Extract range and convert to °C (WorldClim BIO1 is in tenths of °C)
 bio1_vals <- terra::values(bio1_rast, na.rm = TRUE)
-bio1_vals <- bio1_vals / 10  # convert from tenths of °C to °C
 temp_min <- floor(min(bio1_vals))
 temp_max <- ceiling(max(bio1_vals))
+bio1_vals <- bio1_norm <- (bio1_crop - temp_min) / (temp_max - temp_min) # convert from tenths of °C to °C
 
-# Define color palette
+
 n_colors <- 256
 temp_colors <- colorRampPalette(c("#313695", "#74add1", "#fdae61", "#d73027"))(n_colors)
 
-# Plot temperature legend
 png("temperature_legend.png", width = 800, height = 100)
 par(mar = c(2, 2, 2, 2), family = "mono")
 
-# Blank canvas
+
 plot(
   c(0, 1), c(0, 1),
   type = "n", axes = FALSE, xlab = "", ylab = "",
   xaxs = "i", yaxs = "i", bty = "n"
 )
-
-# Draw gradient
 rasterImage(
   as.raster(matrix(temp_colors, ncol = n_colors)),
   xleft = 0.1, ybottom = 0.4,
   xright = 0.9, ytop = 0.6
 )
 
-# Labels
 label_vals <- round(seq(temp_min, temp_max, length.out = 5))
 label_pos <- seq(0.1, 0.9, length.out = 5)
 
-# Add text labels and title
 text(label_pos, rep(0.25, 5), paste0(label_vals, "°C"), cex = 1.2)
 text(0.5, 0.8, "Annual Mean Temperature", cex = 1.5, font = 2)
 
 dev.off()
 
-
-# Reproject and crop to Slovenia
 bio1_proj <- terra::project(bio1_rast, crs_lambert)
 country_sf_proj <- terra::project(terra::vect(country_sf), crs_lambert)
 
 bio1_crop <- terra::crop(bio1_proj, country_sf_proj) |>
   terra::mask(country_sf_proj)
 
-# Rescale temperature raster to 0–1 for visualization
 bio1_vals <- terra::values(bio1_crop, na.rm = TRUE)
 temp_min <- min(bio1_vals)
 temp_max <- max(bio1_vals)
 
-# Normalize values for clearer heatmap rendering
 bio1_norm <- (bio1_crop - temp_min) / (temp_max - temp_min)
 
-# Better color palette for high contrast
 temp_colors <- colorRampPalette(c("#313695", "#74add1", "#fdae61", "#d73027"))(256)
 
-# Define PNG file path for the temperature overlay
 temp_png_file <- "temp_overlay.png"
 png(temp_png_file, width = 1225, height = 842, bg = "white", res = 300)
 par(mar = c(0, 0, 0, 0))
 terra::plot(bio1_norm, col = temp_colors, axes = FALSE, legend = FALSE, main = "")
 dev.off()
 
-# Step 1: Read in your original overlay image
 temp_overlay_img <- image_read(temp_png_file)
 
-# Step 2: Scale the CONTENT (e.g., 120% zoom, tweak as needed)
-temp_overlay_scaled <- image_scale(temp_overlay_img, "1640x1125")  # roughly 1.2x scaling
+temp_overlay_scaled <- image_scale(temp_overlay_img, "1640x1125") 
 
-# Step 3: Recenter it and crop back to original canvas size
-# Your final canvas is still 1225x842
 temp_overlay_adjusted <- image_crop(temp_overlay_scaled, "1225x842+0+0", gravity = "center")
 
-# Step 4: Save and read back into rayshader
 image_write(temp_overlay_adjusted, "adjusted_temp_overlay.png")
 
-# 6A. RENDER FOREST TYPE SCENE
-#-----------------------------
 elmat_forest <- elmat
 
 
@@ -218,7 +169,6 @@ h <- 842
 w <- 1225
 
 
-# Clear previous rayshader scene
 rgl::clear3d()
 
 elmat_forest |>
@@ -239,14 +189,12 @@ elmat_forest |>
     theta = 0
   )
 
-# 7A. RENDER FOREST TYPE IMAGE
-#-----------------------------
 
 rayshader::render_highquality(
   filename = "forest-type-3d.png",
   preview = TRUE,
   light = FALSE,
-  environment_light = "C:\\Users\\vivaa\\Downloads\\air_museum_playground_4k.hdr",
+  environment_light = "air_museum_playground_4k.hdr",
   intensity_env = 2,
   rotate_env = 90,
   interactive = FALSE,
@@ -254,12 +202,9 @@ rayshader::render_highquality(
   width = w, height = h
 )
 
-# 6B. RENDER TEMPERATURE SCENE
-#-----------------------------
 
 temp_overlay <- png::readPNG("adjusted_temp_overlay.png")
 
-# Clear previous rayshader scene
 rgl::clear3d()
 
 elmat_temp <- elmat
@@ -297,8 +242,7 @@ rayshader::render_highquality(
   width = w, height = h
 )
 
-# 8. MAKE LEGEND
-#---------------
+
 
 png("my_legend.png")
 par(family = "mono")
@@ -324,9 +268,6 @@ legend(
     col = cols
 )
 dev.off()
-
-# 9. FINAL MAP
-#-------------
 
 forest_img <- magick::image_read(
     "forest-type-3d.png"
