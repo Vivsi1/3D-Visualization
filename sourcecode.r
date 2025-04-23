@@ -105,7 +105,7 @@ bio1_rast <- terra::rast(bio1_tile_path)
 bio1_vals <- terra::values(bio1_rast, na.rm = TRUE)
 temp_min <- floor(min(bio1_vals))
 temp_max <- ceiling(max(bio1_vals))
-bio1_vals <- bio1_norm <- (bio1_crop - temp_min) / (temp_max - temp_min) # convert from tenths of °C to °C
+bio1_vals <- bio1_norm <- (bio1_crop - temp_min) / (temp_max - temp_min) 
 
 
 n_colors <- 256
@@ -227,8 +227,6 @@ elmat_temp |>
     theta = 0
   )
 
-# 7B. RENDER TEMPERATURE IMAGE
-#-----------------------------
 
 rayshader::render_highquality(
   filename = "temperature-3d.png",
